@@ -1,0 +1,113 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+getwd()
+```
+
+
+```{r}
+data<-read.table("iTokens/networkbnbTX.txt", sep=" ")
+colnames(data)<-c("Seller","Buyer","UnixTime","Amount")
+totalsupply=183345602.24249
+decimals=10^18
+limit=totalsupply*decimals
+```
+
+
+
+```{r}
+#functions to separate outliers and cleaned data
+outliers<-data[data$Amount>limit,]
+cleaned_data<-data[data$Amount<=limit,]
+#to print the number o datapoints
+nrow(data)
+nrow(cleaned_data)
+nrow(outliers)
+
+Seller<-cleaned_data[,1]
+Buyer<-cleaned_data[,2]
+UnixTime<-cleaned_data[,3]
+Amount<-cleaned_data[,4]
+
+library(ggplot2)
+library(fitdistrplus)
+library(dplyr)
+```
+
+```{r}
+FirFreqS <- as.data.frame(table(Seller))
+FirFreqS
+colnames(FirFreqS) <- c("ID","Frequency")
+FirFreqS
+
+SecFreqS <- as.data.frame(table(FirFreqS$Frequency))
+SecFreqS
+colnames(SecFreqS) <- c("Requests", "Users") 
+SecFreqS
+
+barplot(SecFreqS[,2] ,las=2, xlab="Requests", ylab="Users", xlim=c(1,26), col="magenta")
+
+descdist(SecFreqS[,2], discrete = TRUE)
+```
+
+```{r}
+Dist.norm<-fitdist(SecFreqS[,2],distr = "norm")
+Dist.norm
+Dist.pois<-fitdist(SecFreqS[,2], distr="pois")
+Dist.pois
+plot(Dist.pois)
+```
+
+```{r}
+FirFreqB <- as.data.frame(table(Buyer))
+colnames(FirFreqB) <- c("ID","Frequency")
+
+SecFreqB <- as.data.frame(table(FirFreqB$Frequency))
+colnames(SecFreqB) <- c("Requests", "Users") 
+
+barplot(SecFreqB[,2] ,las=2, xlab="Requests", ylab="Users", xlim=c(1,26), col="magenta")
+
+descdist(FrequencyBuyers[,2], discrete = TRUE)
+```
+
+```{r}
+Dist.norm<-fitdist(SecFreqB[,2],distr = "norm")
+Dist.norm
+
+Dist.pois<-fitdist(SecFreqB[,2], distr="pois")
+Dist.pois
+
+plot(Dist.pois)
+```
+
+
+```{r}
+users <- cleaned_data[,1:2]
+users
+sorted_users <- users %>% filter(Seller <= Buyer)
+users_to_swap <- users %>% filter(Seller > Buyer)
+users_to_swap[ , c(1,2)] <- users_to_swap[ , c(2,1)]
+sorted_users <- merge(sorted_users, users_to_swap)
+sorted_users
+grouped_users <- sorted_users %>% group_by(.dots = c("Seller", "Buyer")) %>% count()
+nrow(grouped_users)
+write.csv(test, file = "my_data.csv")
+
+```
