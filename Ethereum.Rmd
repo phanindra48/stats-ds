@@ -1,113 +1,280 @@
----
-title: "R Notebook"
-output: html_notebook
----
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
-
+READING THREE TOKENS BNB, STATUSNETWORK, MCAP
 ```{r}
-plot(cars)
-```
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
-
-```{r}
-getwd()
-```
-
-
-```{r}
-data<-read.table("iTokens/networkbnbTX.txt", sep=" ")
-colnames(data)<-c("Seller","Buyer","UnixTime","Amount")
-totalsupply=183345602.24249
-decimals=10^18
-limit=totalsupply*decimals
-```
-
-
-
-```{r}
-#functions to separate outliers and cleaned data
-outliers<-data[data$Amount>limit,]
-cleaned_data<-data[data$Amount<=limit,]
-#to print the number o datapoints
-nrow(data)
-nrow(cleaned_data)
-nrow(outliers)
-
-Seller<-cleaned_data[,1]
-Buyer<-cleaned_data[,2]
-UnixTime<-cleaned_data[,3]
-Amount<-cleaned_data[,4]
-
-library(ggplot2)
-library(fitdistrplus)
+bnb <- read.table('iTokens/networkbnbTX.txt', sep = " ")
+statusnetwork <- read.table('iTokens/networkstatusnetworkTX.txt', sep = " ")
+mcap <- read.table('iTokens/networkmcapTX.txt', sep=" ")
 library(dplyr)
 ```
-
+NAMING FOUR COLUMNS OF TOKENS
 ```{r}
-FirFreqS <- as.data.frame(table(Seller))
-FirFreqS
-colnames(FirFreqS) <- c("ID","Frequency")
-FirFreqS
+names(bnb) <- c('Seller', 'Buyer', 'Time', 'Amount')
+names(statusnetwork) <- c('Seller', 'Buyer', 'Time', 'Amount')
+names(mcap) <- c('Seller', 'Buyer', 'Time', 'Amount')
 
-SecFreqS <- as.data.frame(table(FirFreqS$Frequency))
-SecFreqS
-colnames(SecFreqS) <- c("Requests", "Users") 
-SecFreqS
-
-barplot(SecFreqS[,2] ,las=2, xlab="Requests", ylab="Users", xlim=c(1,26), col="magenta")
-
-descdist(SecFreqS[,2], discrete = TRUE)
 ```
 
+SUPPLY AND DECIMALS FROM ETHERSCAN.IO
 ```{r}
-Dist.norm<-fitdist(SecFreqS[,2],distr = "norm")
-Dist.norm
-Dist.pois<-fitdist(SecFreqS[,2], distr="pois")
-Dist.pois
-plot(Dist.pois)
+supply_bnb <- 183345602.24249
+supply_statusnetwork <- 6804870174.8781
+supply_mcap <- 100000000
+decimals_bnb <- 10^18
+decimals_statusnetwork <- 10^18
+decimals_mcap <- 10^8
 ```
 
+FILTERED TOKENS AFTER REMOVING OUTLIERS
 ```{r}
-FirFreqB <- as.data.frame(table(Buyer))
-colnames(FirFreqB) <- c("ID","Frequency")
-
-SecFreqB <- as.data.frame(table(FirFreqB$Frequency))
-colnames(SecFreqB) <- c("Requests", "Users") 
-
-barplot(SecFreqB[,2] ,las=2, xlab="Requests", ylab="Users", xlim=c(1,26), col="magenta")
-
-descdist(FrequencyBuyers[,2], discrete = TRUE)
+bnbFiltered <- bnb %>% filter((Amount < decimals_bnb * supply_bnb) & Buyer != 0 & Seller != 0)
+statusnetworkFiltered <- statusnetwork %>% filter(Amount < decimals_statusnetwork * supply_statusnetwork)
+mcapFiltered <- mcap %>% filter(Amount < decimals_mcap * supply_mcap)
 ```
 
+CALCULATING NUMBER OF OUTLIERS, TOTAL ROWS, FILTERED TOKENS
 ```{r}
-Dist.norm<-fitdist(SecFreqB[,2],distr = "norm")
-Dist.norm
+nrow(bnb)
+nrow(bnbFiltered)
+bnb %>% filter(Amount >= decimals_bnb * supply_bnb) %>% nrow()
 
-Dist.pois<-fitdist(SecFreqB[,2], distr="pois")
-Dist.pois
+nrow(statusnetwork)
+nrow(statusnetworkFiltered)
+statusnetwork %>% filter(Amount >= decimals_statusnetwork * supply_statusnetwork) %>% nrow()
 
-plot(Dist.pois)
+nrow(mcap)
+nrow(mcapFiltered)
+mcap %>% filter(Amount >= decimals_mcap * supply_mcap) %>% nrow()
 ```
 
 
+GROUPING BUYERS  
 ```{r}
-users <- cleaned_data[,1:2]
+buys_bnb.distribution <- bnbFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup  
+buys_statusnetwork.distribution <- statusnetworkFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup
+buys_mcap.distribution <- mcapFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup
+nrow(buys_bnb.distribution)
+nrow(buys_bnb.distribution %>% filter(is.na(Buyer)))
+nrow(buys_statusnetwork.distribution)
+nrow(buys_mcap.distribution)
+```
+
+GROUPING BUYER-SELLER PAIRS  
+```{r}
+
+users <- bnbFiltered[,1:2]
 users
 sorted_users <- users %>% filter(Seller <= Buyer)
 users_to_swap <- users %>% filter(Seller > Buyer)
 users_to_swap[ , c(1,2)] <- users_to_swap[ , c(2,1)]
 sorted_users <- merge(sorted_users, users_to_swap)
 sorted_users
-grouped_users <- sorted_users %>% group_by(.dots = c("Seller", "Buyer")) %>% count()
-nrow(grouped_users)
-write.csv(test, file = "my_data.csv")
+bs.distribution <- sorted_users %>% group_by(.dots = c("Seller", "Buyer")) %>% count() %>% ungroup
+nrow(bs.distribution)
 
+
+
+test <- bs.distribution %>% arrange(-n) %>% head(400)
+test
+
+bs.distribution %>% group_by(n) %>% summarize(count = n())
+
+test <- test %>% group_by(n) %>% summarize(count = n())
+test %>% arrange(-count) %>% head(400)
+
+
+test <- bs.distribution %>% filter(n > 3 & n < 300)
+test %>% filter(Seller == 5)
+nrow(test)
+test
+
+
+# fit <- fitdistr(test$n, densfun="normal")  # we assume my_data ~ Normal(?,?)
+# fit
+
+# test %>% group_by(n) %>% summarize(count = n())
+
+
+fit <- fitdistr(test$n, densfun="normal")  # we assume my_data ~ Normal(?,?)
+lnfit <- fitdist(test$n, 'lnorm')
+expfit <- fitdist(test$n, 'exp')
+gammafit <- fitdist(test$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+nbinfit <- fitdist(test$n, 'nbinom')
+
+
+hist(test$n, pch=20, breaks=25, prob=TRUE, main="")
+curve(dnorm(x, lnfit$estimate[1], lnfit$estimate[2]), col="blue", lwd=1, add=T)
+
+
+curve(dnorm(x, fit$estimate[1], fit$estimate[2]), col="red", lwd=2, add=T, n = 300)
+curve(dnorm(x, expfit$estimate[1], expfit$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, gammafit$estimate[1], gammafit$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, nbinfit$estimate[1], nbinfit$estimate[2]), col="black", lwd=2, add=T)
+
+
+```
+
+TESTING 
+```{r}
+tail(buys_bnb.distribution[order(Buyer),], 100)
+
+library(fitdistrplus)
+
+
+test <- bnbFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% filter(Buyer == 0)
+test[order(Buyer),]
+
+bnbFiltered %>% filter(Buyer == 0)
+
+buys.distribution %>% filter(is.na(n))
+
+
+set.seed(101)
+my_data <- rnorm(250, mean=1, sd=0.45)      # unkonwn distribution parameters
+fit <- fitdistr(my_data, densfun="normal")  # we assume my_data ~ Normal(?,?)
+fit
+
+
+test <- buys_bnb.distribution %>% arrange(-n) %>% head(400)
+test
+
+test <- buys_bnb.distribution %>% filter( n < 260 & n > 6)
+test
+nrow(test)
+
+fit <- fitdistr(test$n, densfun="normal")  # we assume my_data ~ Normal(?,?)
+fit
+
+# test %>% group_by(n) %>% summarize(count = n())
+
+
+fit <- fitdistr(test$n, densfun="normal")  # we assume my_data ~ Normal(?,?)
+lnfit <- fitdist(test$n, 'lnorm')
+fit.exp.buy_bnb <- fitdist(test$n, 'exp')
+fit.gamma.buy_bnb <- fitdist(test$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.nbinom.buy_bnb <- fitdist(test$n, 'nbinom')
+
+# library(scales)
+
+# rescale(test$n, to =c(1,300))
+
+
+hist(test$n, pch=20, breaks=25, prob=TRUE, main="")
+
+curve(dnorm(x, fit$estimate[1], fit$estimate[2]), col="red", lwd=2, add=T)
+curve(dnorm(x, lnfit$estimate[1], lnfit$estimate[2]), col="blue", lwd=2, add=T)
+curve(dnorm(x, fit.exp.buy_bnb$estimate[1], fit.exp.buy_bnb$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, fit.gamma.buy_bnb$estimate[1], fit.gamma.buy_bnb$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, fit.nbinom.buy_bnb$estimate[1], fit.nbinom.buy_bnb$estimate[2]), col="black", lwd=2, add=T)
+
+
+# curve(dnorm(x, fit$estimate[1], fit$estimate[2]), col="red", lwd=2, add=T)
+```
+
+
+GROUPING SELLERS
+```{r}
+sells_bnb.distribution <- bnbFiltered %>% group_by(Seller) %>% summarise(n = n()) %>% ungroup
+sells_statusnetwork.distribution <- statusnetworkFiltered %>% group_by(Seller) %>% summarise(n = n()) %>% ungroup
+sells_mcap.distribution <- mcapFiltered %>% group_by(Seller) %>% summarise(n = n()) %>% ungroup
+nrow(sells_bnb.distribution)
+nrow(sells_statusnetwork.distribution)
+nrow(sells_mcap.distribution)
+```
+```{r}
+library(fitdistrplus)
+descdist(sells_bnb.distribution$n, discrete = TRUE)
+```
+
+DISTRIBUTION OF BUYERS AND SELLERS FOR BNB 
+```{r}
+fit.exp.buy_bnb <- fitdist(buys_bnb.distribution$n, 'exp')
+fit.gamma.buy_bnb <- fitdist(buys_bnb.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.geometric.buy_bnb <- fitdist(buys_bnb.distribution$n, 'geom')
+fit.log.buy_bnb <- fitdist(buys_bnb.distribution$n, 'logis')
+fit.lnorm.buy_bnb <- fitdist(buys_bnb.distribution$n, 'lnorm')
+fit.nbinom.buy_bnb <- fitdist(buys_bnb.distribution$n, 'nbinom')
+fit.norm.buy_bnb <- fitdist(buys_bnb.distribution$n, 'norm')
+fit.pois.buy_bnb <- fitdist(buys_bnb.distribution$n, 'pois')
+fit.unif.buy_bnb <- fitdist(buys_bnb.distribution$n, 'unif')
+fit.weibull.buy_bnb <- fitdist(buys_bnb.distribution$n, 'weibull')
+
+plot(fit.exp.buy_bnb)
+
+
+fit.exp.sell_bnb <- fitdist(sells_bnb.distribution$n, 'exp')
+fit.gamma.sell_bnb <- fitdist(sells_bnb.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.geometric.sell_bnb <- fitdist(sells_bnb.distribution$n, 'geom')
+fit.log.sell_bnb <- fitdist(sells_bnb.distribution$n, 'logis')
+fit.lnorm.sell_bnb <- fitdist(sells_bnb.distribution$n, 'lnorm')
+fit.nbinom.sell_bnb <- fitdist(sells_bnb.distribution$n, 'nbinom')
+fit.norm.sell_bnb <- fitdist(sells_bnb.distribution$n, 'norm')
+fit.pois.sell_bnb <- fitdist(sells_bnb.distribution$n, 'pois')
+fit.unif.sell_bnb <- fitdist(sells_bnb.distribution$n, 'unif')
+fit.weibull.sell_bnb <- fitdist(sells_bnb.distribution$n, 'weibull')
+
+gofstat(list(fit.weibull.buy_bnb, fit.gamma.buy_bnb, fit.lnorm.buy_bnb, fit.exp.buy_bnb, fit.log.buy_bnb, fit.geometric.buy_bnb, fit.nbinom.buy_bnb, fit.norm.buy_bnb, fit.pois.buy_bnb, fit.unif.buy_bnb))
+gofstat(list(fit.weibull.sell_bnb, fit.gamma.sell_bnb, fit.lnorm.sell_bnb, fit.exp.sell_bnb, fit.log.sell_bnb, fit.geometric.sell_bnb, fit.nbinom.sell_bnb, fit.norm.sell_bnb, fit.pois.sell_bnb, fit.unif.sell_bnb))
+```
+DISTRIBUTION OF BUYERS AND SELLERS FOR STATUSNETWORK
+```{r}
+fit.exp.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'exp')
+fit.gamma.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.geometric.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'geom')
+fit.log.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'logis')
+fit.lnorm.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'lnorm')
+fit.nbinom.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'nbinom')
+fit.norm.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'norm')
+fit.pois.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'pois')
+fit.unif.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'unif')
+fit.weibull.buy_statusnetwork <- fitdist(buys_statusnetwork.distribution$n, 'weibull')
+
+fit.exp.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'exp')
+fit.gamma.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.geometric.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'geom')
+fit.log.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'logis')
+fit.lnorm.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'lnorm')
+fit.nbinom.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'nbinom')
+fit.norm.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'norm')
+fit.pois.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'pois')
+fit.unif.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'unif')
+fit.weibull.sell_statusnetwork <- fitdist(sells_statusnetwork.distribution$n, 'weibull')
+
+gofstat(list(fit.weibull.buy_statusnetwork, fit.gamma.buy_statusnetwork, fit.lnorm.buy_statusnetwork, fit.exp.buy_statusnetwork, fit.log.buy_statusnetwork, fit.geometric.buy_statusnetwork, fit.nbinom.buy_statusnetwork, fit.norm.buy_statusnetwork, fit.pois.buy_statusnetwork, fit.unif.buy_statusnetwork))
+gofstat(list(fit.weibull.sell_statusnetwork, fit.gamma.sell_statusnetwork, fit.lnorm.sell_statusnetwork, fit.exp.sell_statusnetwork, fit.log.sell_statusnetwork, fit.geometric.sell_statusnetwork, fit.nbinom.sell_statusnetwork, fit.norm.sell_statusnetwork, fit.pois.sell_statusnetwork, fit.unif.sell_statusnetwork))
+
+```
+
+DISTRIBUTION OF BUYERS AND SELLERS FOR MCAP
+```{r}
+fit.exp.buy_mcap <- fitdist(buys_mcap.distribution$n, 'exp')
+fit.gamma.buy_mcap <- fitdist(buys_mcap.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.geometric.buy_mcap <- fitdist(buys_mcap.distribution$n, 'geom')
+fit.log.buy_mcap <- fitdist(buys_mcap.distribution$n, 'logis')
+fit.lnorm.buy_mcap <- fitdist(buys_mcap.distribution$n, 'lnorm')
+fit.nbinom.buy_mcap <- fitdist(buys_mcap.distribution$n, 'nbinom')
+fit.norm.buy_mcap <- fitdist(buys_mcap.distribution$n, 'norm')
+fit.pois.buy_mcap <- fitdist(buys_mcap.distribution$n, 'pois')
+fit.unif.buy_mcap <- fitdist(buys_mcap.distribution$n, 'unif')
+fit.weibull.buy_mcap <- fitdist(buys_mcap.distribution$n, 'weibull')
+
+fit.exp.sell_mcap <- fitdist(sells_mcap.distribution$n, 'exp')
+fit.gamma.sell_mcap <- fitdist(sells_mcap.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.geometric.sell_mcap <- fitdist(sells_mcap.distribution$n, 'geom')
+fit.log.sell_mcap <- fitdist(sells_mcap.distribution$n, 'logis')
+fit.lnorm.sell_mcap <- fitdist(sells_mcap.distribution$n, 'lnorm')
+fit.nbinom.sell_mcap <- fitdist(sells_mcap.distribution$n, 'nbinom')
+fit.norm.sell_mcap <- fitdist(sells_mcap.distribution$n, 'norm')
+fit.pois.sell_mcap <- fitdist(sells_mcap.distribution$n, 'pois')
+fit.unif.sell_mcap <- fitdist(sells_mcap.distribution$n, 'unif')
+fit.weibull.sell_mcap <- fitdist(sells_mcap.distribution$n, 'weibull')
+gofstat(list(fit.weibull.buy_mcap, fit.gamma.buy_mcap, fit.lnorm.buy_mcap, fit.exp.buy_mcap, fit.log.buy_mcap, fit.geometric.buy_mcap, fit.nbinom.buy_mcap, fit.norm.buy_mcap, fit.pois.buy_mcap, fit.unif.buy_mcap))
+gofstat(list(fit.weibull.sell_mcap, fit.gamma.sell_mcap, fit.lnorm.sell_mcap, fit.exp.sell_mcap, fit.log.sell_mcap, fit.geometric.sell_mcap, fit.nbinom.sell_mcap, fit.norm.sell_mcap, fit.pois.sell_mcap, fit.unif.sell_mcap))
+```
+
+
+
+Plotting
+```{r}
+fit.exp.buy_bnb
+plot(fit.exp.buy_bnb)
 ```
