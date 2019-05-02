@@ -1,0 +1,331 @@
+# Statistical Methods for Data Science - Final Project
+# Team:
+#   Phanindra Pydisetty (PXP180031)
+#   Akhil Bitra (AXB170061)
+
+Load required packages
+```{r}
+library(dplyr)
+library(fitdistrplus)
+```
+
+LOAD THREE TOKENS BNB, STATUSNETWORK, MCAP
+```{r}
+bnb <- read.table('iTokens/networkbnbTX.txt', sep = " ")
+statusnetwork <- read.table('iTokens/networkstatusnetworkTX.txt', sep = " ")
+mcap <- read.table('iTokens/networkmcapTX.txt', sep=" ")
+
+```
+
+NAMING FOUR COLUMNS OF TOKENS
+```{r}
+colNames <- c('Seller', 'Buyer', 'Time', 'Amount')
+names(bnb) <- colNames
+names(statusnetwork) <- colNames
+names(mcap) <- colNames
+```
+
+SUPPLY DECIMALS FROM ETHERSCAN.IO TO FILTER OUTLIERS
+```{r}
+supply_bnb <- 183345602.24249
+supply_statusnetwork <- 6804870174.8781
+supply_mcap <- 100000000
+decimals_bnb <- 10^18
+decimals_statusnetwork <- 10^18
+decimals_mcap <- 10^8
+```
+
+FILTERED TOKENS AFTER REMOVING OUTLIERS
+```{r}
+bnbFiltered <- bnb %>% filter((Amount < decimals_bnb * supply_bnb) & Buyer != 0 & Seller != 0)
+statusnetworkFiltered <- statusnetwork %>% filter(Amount < decimals_statusnetwork * supply_statusnetwork & Buyer != 0 & Seller != 0)
+mcapFiltered <- mcap %>% filter(Amount < decimals_mcap * supply_mcap & Buyer != 0 & Seller != 0)
+```
+
+CALCULATING NUMBER OF OUTLIERS, TOTAL ROWS, FILTERED TOKENS
+```{r}
+nrow(bnb)
+nrow(bnbFiltered)
+bnb %>% filter(Amount >= decimals_bnb * supply_bnb) %>% nrow()
+
+nrow(statusnetwork)
+nrow(statusnetworkFiltered)
+statusnetwork %>% filter(Amount >= decimals_statusnetwork * supply_statusnetwork) %>% nrow()
+
+nrow(mcap)
+nrow(mcapFiltered)
+mcap %>% filter(Amount >= decimals_mcap * supply_mcap) %>% nrow()
+```
+
+Conclusion - We dont have outliers more than 30.
+
+
+GROUPING BUYER-SELLER PAIRS
+We are swapping values of buyer and seller and grouping them.
+
+```{r}
+# BNB Token
+users <- bnbFiltered[,1:2]
+# users
+sorted_users <- users %>% filter(Seller <= Buyer)
+users_to_swap <- users %>% filter(Seller > Buyer)
+users_to_swap[, c(1,2)] <- users_to_swap[, c(2,1)]
+sorted_users <- merge(sorted_users, users_to_swap)
+# sorted_users
+bs.bnb.distribution <- sorted_users %>% group_by(.dots = c("Seller", "Buyer")) %>% count() %>% ungroup
+nrow(bs.bnb.distribution)
+
+# StatusNetwork Token (sn)
+users <- statusnetworkFiltered[,1:2]
+# users
+sorted_users <- users %>% filter(Seller <= Buyer)
+users_to_swap <- users %>% filter(Seller > Buyer)
+users_to_swap[, c(1,2)] <- users_to_swap[, c(2,1)]
+sorted_users <- merge(sorted_users, users_to_swap)
+# sorted_users
+bs.statusnetwork.distribution <- sorted_users %>% group_by(.dots = c("Seller", "Buyer")) %>% count() %>% ungroup
+nrow(bs.statusnetwork.distribution)
+
+# MCAP Token
+users <- mcapFiltered[,1:2]
+# users
+sorted_users <- users %>% filter(Seller <= Buyer)
+users_to_swap <- users %>% filter(Seller > Buyer)
+users_to_swap[, c(1,2)] <- users_to_swap[, c(2,1)]
+sorted_users <- merge(sorted_users, users_to_swap)
+# sorted_users
+bs.mcap.distribution <- sorted_users %>% group_by(.dots = c("Seller", "Buyer")) %>% count() %>% ungroup
+nrow(bs.mcap.distribution)
+```
+
+```{r}
+# Distributions for BNB
+bs.bnb.distribution %>% arrange(-n) %>% head(400)
+# bs.bnb.distribution
+# det_outliers <- bs.bnb.distribution %>% group_by(n) %>% summarize(count = n())
+
+# test <- det_outliers %>% group_by(n) %>% summarize(count = n())
+# test %>% arrange(-count) %>% head(400)
+
+#
+# fit <- fitdistr(det_outliers$count, densfun="normal")
+# fit$estimate
+
+# Filtering out the extreme transaction which are less than 0.5 percent
+# They extend the x-axis and we plotting the values on graph won't look pretty
+bs.bnb.distribution <- bs.bnb.distribution %>% filter(n > 3 & n < 300)
+
+# fit.norm.bnb <- fitdistr(bs.bnb.distribution$n, densfun="normal")  # we assume my_data ~ Normal(?,?)
+fit.norm.bnb <- fitdist(bs.bnb.distribution$n, 'norm')
+fit.ln.bnb <- fitdist(bs.bnb.distribution$n, 'lnorm')
+fit.gamma.bnb <- fitdist(bs.bnb.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.nbin.bnb <- fitdist(bs.bnb.distribution$n, 'nbinom')
+fit.weibull.bnb <- fitdist(bs.bnb.distribution$n, 'weibull')
+fit.log.bnb <- fitdist(bs.bnb.distribution$n, 'logis')
+fit.unif.bnb <- fitdist(bs.bnb.distribution$n, 'unif')
+
+
+gofstat(list(fit.gamma.bnb,fit.log.bnb, fit.ln.bnb, fit.nbin.bnb, fit.norm.bnb, fit.unif.bnb, fit.weibull.bnb))
+
+# Plot histogram
+hist(bs.bnb.distribution$n, pch=20, breaks=25, prob=TRUE, main="")
+
+# Plot curves on the above histgram
+curve(dnorm(x, fit.ln.bnb$estimate[1], fit.ln.bnb$estimate[2]), col="blue", lwd=1, add=T)
+curve(dnorm(x, fit.norm.bnb$estimate[1], fit.norm.bnb$estimate[2]), col="red", lwd=2, add=T)
+curve(dnorm(x, fit.gamma.bnb$estimate[1], fit.gamma.bnb$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, fit.nbin.bnb$estimate[1], fit.nbin.bnb$estimate[2]), col="black", lwd=2, add=T)
+curve(dnorm(x, fit.unif.bnb$estimate[1], fit.unif.bnb$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, fit.log.bnb$estimate[1], fit.log.bnb$estimate[2]), col="brown", lwd=2, add=T)
+curve(dnorm(x, fit.weibull.bnb$estimate[1], fit.weibull.bnb$estimate[2]), col="pink", lwd=2, add=T)
+
+
+# Distributions for Status Network
+# bs.statusnetwork.distribution %>% arrange(-n) %>% head(400)
+# bs.statusnetwork.distribution
+
+# Filtering out the extreme transaction which are less than 0.5 percent
+# They extend the x-axis and we plotting the values on graph won't look pretty
+bs.statusnetwork.distribution <- bs.statusnetwork.distribution %>% filter(n > 3 & n < 300)
+
+fit.norm.statusnetwork <- fitdist(bs.statusnetwork.distribution$n, 'norm')
+fit.ln.statusnetwork <- fitdist(bs.statusnetwork.distribution$n, 'lnorm')
+fit.gamma.statusnetwork <- fitdist(bs.statusnetwork.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.nbin.statusnetwork <- fitdist(bs.statusnetwork.distribution$n, 'nbinom')
+fit.weibull.statusnetwork <- fitdist(bs.statusnetwork.distribution$n, 'weibull')
+fit.log.statusnetwork <- fitdist(bs.statusnetwork.distribution$n, 'logis')
+fit.unif.statusnetwork <- fitdist(bs.statusnetwork.distribution$n, 'unif')
+
+
+gofstat(list(fit.gamma.statusnetwork,fit.log.statusnetwork, fit.ln.statusnetwork, fit.nbin.statusnetwork, fit.norm.statusnetwork, fit.unif.statusnetwork, fit.weibull.statusnetwork))
+
+# Plot histogram
+hist(bs.statusnetwork.distribution$n, pch=20, breaks=25, prob=TRUE, main="")
+
+# Plot curves on the above histgram
+curve(dnorm(x, fit.ln.statusnetwork$estimate[1], fit.ln.statusnetwork$estimate[2]), col="blue", lwd=1, add=T)
+curve(dnorm(x, fit.norm.statusnetwork$estimate[1], fit.norm.statusnetwork$estimate[2]), col="red", lwd=2, add=T)
+curve(dnorm(x, fit.gamma.statusnetwork$estimate[1], fit.gamma.statusnetwork$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, fit.nbin.statusnetwork$estimate[1], fit.nbin.statusnetwork$estimate[2]), col="black", lwd=2, add=T)
+curve(dnorm(x, fit.unif.statusnetwork$estimate[1], fit.unif.statusnetwork$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, fit.log.statusnetwork$estimate[1], fit.log.statusnetwork$estimate[2]), col="brown", lwd=2, add=T)
+curve(dnorm(x, fit.weibull.statusnetwork$estimate[1], fit.weibull.statusnetwork$estimate[2]), col="pink", lwd=2, add=T)
+
+
+# Distributions for MCAP
+# bs.mcap.distribution %>% arrange(-n) %>% head(400)
+# bs.mcap.distribution
+
+# Filtering out the extreme transaction which are less than 0.5 percent
+# They extend the x-axis and we plotting the values on graph won't look pretty
+bs.mcap.distribution <- bs.mcap.distribution %>% filter(n > 3 & n < 300)
+
+fit.norm.mcap <- fitdist(bs.mcap.distribution$n, 'norm')
+fit.ln.mcap <- fitdist(bs.mcap.distribution$n, 'lnorm')
+fit.gamma.mcap <- fitdist(bs.mcap.distribution$n, 'gamma', lower = c(0, 0), start = list(scale = 1, shape = 1))
+fit.nbin.mcap <- fitdist(bs.mcap.distribution$n, 'nbinom')
+fit.weibull.mcap <- fitdist(bs.mcap.distribution$n, 'weibull')
+fit.log.mcap <- fitdist(bs.mcap.distribution$n, 'logis')
+fit.unif.mcap <- fitdist(bs.mcap.distribution$n, 'unif')
+
+
+gofstat(list(fit.gamma.mcap,fit.log.mcap, fit.ln.mcap, fit.nbin.mcap, fit.norm.mcap, fit.unif.mcap, fit.weibull.mcap))
+
+# Plot histogram
+hist(bs.mcap.distribution$n, pch=20, breaks=25, prob=TRUE, main="")
+
+# Plot curves on the above histgram
+curve(dnorm(x, fit.ln.mcap$estimate[1], fit.ln.mcap$estimate[2]), col="blue", lwd=1, add=T)
+curve(dnorm(x, fit.norm.mcap$estimate[1], fit.norm.mcap$estimate[2]), col="red", lwd=2, add=T)
+curve(dnorm(x, fit.gamma.mcap$estimate[1], fit.gamma.mcap$estimate[2]), col="orange", lwd=2, add=T)
+curve(dnorm(x, fit.nbin.mcap$estimate[1], fit.nbin.mcap$estimate[2]), col="black", lwd=2, add=T)
+curve(dnorm(x, fit.unif.mcap$estimate[1], fit.unif.mcap$estimate[2]), col="green", lwd=2, add=T)
+curve(dnorm(x, fit.log.mcap$estimate[1], fit.log.mcap$estimate[2]), col="brown", lwd=2, add=T)
+curve(dnorm(x, fit.weibull.mcap$estimate[1], fit.weibull.mcap$estimate[2]), col="pink", lwd=2, add=T)
+```
+
+Conclusion - Curve in Blue color fits the entire distribution quite well for all three tokens. So LogNormal seems to be the best fit
+```r
+fit.ln.bnb
+fit.ln.statusnetwork
+fit.ln.mcap
+```
+
+Project Part 2
+Load prices for the three tokens
+```{r}
+statusnetworkPrice = read.table(file="prices/statusnetwork", header=T,sep="\t")
+bnbPrice = read.table(file="prices/bnb.csv", header=T,sep=",")
+mcapPrice = read.table(file="prices/mcap", header=T,sep="\t")
+colNames <- c("Date","Open","High","Low", "Close" ,"Volume","MarketCap")
+colnames(statusnetworkPrice) <- colNames
+colnames(bnbPrice) <- colNames
+colnames(mcapPrice) <- colNames
+# bnbPrice
+# mcapPrice
+# statusnetworkPrice
+# bnbFiltered
+# statusnetworkFiltered
+
+colNames <- c("Seller", "Buyer", "Unixdate", "Amount")
+colnames(bnbFiltered) <- colNames
+colnames(statusnetworkFiltered) <- colNames
+colnames(mcapFiltered) <- colNames
+
+```
+
+Bring dates in two dataframs into same format
+```{r}
+bnbPrice$Date<-as.Date(bnbPrice$Date,format="%m/%d/%Y")
+bnbPrice$Date<- as.Date(as.POSIXct(bnbPrice$Date, origin="1970-01-01"))
+bnbFiltered$Unixdate<- as.Date(as.POSIXct(bnbFiltered$Unixdate, origin="1970-01-01"))
+# bnbFiltered
+
+statusnetworkPrice$Date<-as.Date(statusnetworkPrice$Date,format="%m/%d/%y")
+statusnetworkPrice$Date<- as.Date(as.POSIXct(statusnetworkPrice$Date, origin="1970-01-01"))
+statusnetworkFiltered$Unixdate<- as.Date(as.POSIXct(statusnetworkFiltered$Unixdate, origin="1970-01-01"))
+# statusnetworkPrice
+
+mcapPrice$Date<-as.Date(mcapPrice$Date,format="%m/%d/%y")
+mcapPrice$Date<- as.Date(as.POSIXct(mcapPrice$Date, origin="1970-01-01"))
+mcapFiltered$Unixdate<- as.Date(as.POSIXct(mcapFiltered$Unixdate, origin="1970-01-01"))
+# mcapFiltered
+```
+
+Build Regression Models for three tokens
+```{r}
+# BNB buys freq distribution
+buys.distribution.bnb  <- bnbFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup
+colnames(buys.distribution.bnb) <- c("Buyer","Frequency")
+sortedBNB_Buyer <- buys.distribution.bnb[order(-buys.distribution.bnb$Frequency),]
+
+# Most active buyer and total count of transaction that they made
+head(sortedBNB_Buyer, 1)
+
+# BNB sells freq distribution
+sells.distribution.bnb  <- bnbFiltered %>% group_by(Seller) %>% summarise(n = n()) %>% ungroup
+colnames(sells.distribution.bnb) <- c("Seller","Frequency")
+sortedBNB_Seller <- sells.distribution.bnb[order(-sells.distribution.bnb$Frequency),]
+
+# Most active seller and total count of transaction that they made
+head(sortedBNB_Seller, 1)
+
+# Regression
+bnbRegression <- merge(bnbFiltered, bnbPrice, by.x="Unixdate", by.y="Date")
+
+lm.fit.bnb = lm(Low ~ Amount + Open, data= bnbRegression)
+summary(lm.fit.bnb)
+
+plot(lm.fit.bnb)
+
+
+# Status Network buys freq distribution
+buys.distribution.statusnetwork  <- statusnetworkFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup
+colnames(buys.distribution.statusnetwork) <- c("Buyer","Frequency")
+sortedStatusNetwork_Buyer <- buys.distribution.statusnetwork[order(-buys.distribution.statusnetwork$Frequency),]
+
+# Most active buyer and total count of transaction that they made
+head(sortedStatusNetwork_Buyer, 1)
+
+# BNB sells freq distribution
+sells.distribution.statusnetwork  <- statusnetworkFiltered %>% group_by(Seller) %>% summarise(n = n()) %>% ungroup
+colnames(sells.distribution.statusnetwork) <- c("Seller","Frequency")
+sortedStatusNetwork_Seller <- sells.distribution.statusnetwork[order(-sells.distribution.statusnetwork$Frequency),]
+
+# Most active seller and total count of transaction that they made
+head(sortedStatusNetwork_Seller, 1)
+
+# Regression
+statusnetworkRegression <- merge(statusnetworkFiltered, statusnetworkPrice, by.x="Unixdate", by.y="Date")
+
+lm.fit.statusnetwork = lm(Low ~ Amount + Open, data= statusnetworkRegression)
+summary(lm.fit.statusnetwork)
+
+plot(lm.fit.statusnetwork)
+
+
+# MCAP buys freq distribution
+buys.distribution.mcap  <- mcapFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup
+colnames(buys.distribution.mcap) <- c("Buyer","Frequency")
+sortedStatusNetwork_Buyer <- buys.distribution.mcap[order(-buys.distribution.mcap$Frequency),]
+
+# Most active buyer and total count of transaction that they made
+head(sortedStatusNetwork_Buyer, 1)
+
+# MCAP sells freq distribution
+sells.distribution.mcap  <- mcapFiltered %>% group_by(Seller) %>% summarise(n = n()) %>% ungroup
+colnames(sells.distribution.mcap) <- c("Seller","Frequency")
+sortedStatusNetwork_Seller <- sells.distribution.mcap[order(-sells.distribution.mcap$Frequency),]
+
+# Most active seller and total count of transaction that they made
+head(sortedStatusNetwork_Seller, 1)
+
+# Regression
+mcapRegression <- merge(mcapFiltered, mcapPrice, by.x="Unixdate", by.y="Date")
+
+lm.fit.mcap = lm(Low ~ Amount + Open, data= mcapRegression)
+summary(lm.fit.mcap)
+
+plot(lm.fit.mcap)
+
+```

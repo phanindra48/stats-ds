@@ -48,17 +48,6 @@ mcap %>% filter(Amount >= decimals_mcap * supply_mcap) %>% nrow()
 ```
 
 
-GROUPING BUYERS  
-```{r}
-buys_bnb.distribution <- bnbFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup  
-buys_statusnetwork.distribution <- statusnetworkFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup
-buys_mcap.distribution <- mcapFiltered %>% group_by(Buyer) %>% summarise(n = n()) %>% ungroup
-nrow(buys_bnb.distribution)
-nrow(buys_bnb.distribution %>% filter(is.na(Buyer)))
-nrow(buys_statusnetwork.distribution)
-nrow(buys_mcap.distribution)
-```
-
 GROUPING BUYER-SELLER PAIRS  
 ```{r}
 
@@ -77,11 +66,13 @@ nrow(bs.distribution)
 test <- bs.distribution %>% arrange(-n) %>% head(400)
 test
 
-bs.distribution %>% group_by(n) %>% summarize(count = n())
+det_outliers <- bs.distribution %>% group_by(n) %>% summarize(count = n())
 
-test <- test %>% group_by(n) %>% summarize(count = n())
+test <- det_outliers %>% group_by(n) %>% summarize(count = n())
 test %>% arrange(-count) %>% head(400)
 
+fit <- fitdistr(det_outliers$count, densfun="normal")
+fit$estimate
 
 test <- bs.distribution %>% filter(n > 3 & n < 300)
 test %>% filter(Seller == 5)
@@ -137,6 +128,8 @@ fit
 
 test <- buys_bnb.distribution %>% arrange(-n) %>% head(400)
 test
+
+buys_bnb.distribution
 
 test <- buys_bnb.distribution %>% filter( n < 260 & n > 6)
 test
